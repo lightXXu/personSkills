@@ -1,13 +1,13 @@
 ---
-name: llm-wiki-manager
-description: Manage a SiYuan-based LLM Wiki knowledge system. Use when the user asks to ingest new knowledge into an LLM Wiki, search or audit SiYuan cards, create or update concept/source/project/question/map cards, maintain custom attributes and block references, build a retrieval workbench, or evolve the LLM Wiki architecture and milestones.
+name: siyuan-llm-wiki-manager
+description: Manage an LLM Wiki knowledge system built on SiYuan Notes / 思源笔记. Use when the user asks to ingest new knowledge into a SiYuan-based LLM Wiki, search or audit SiYuan cards, create or update concept/source/project/question/map cards, maintain SiYuan custom attributes and block references, build a retrieval workbench, or evolve the LLM Wiki architecture and milestones.
 ---
 
-# LLM Wiki Manager
+# SiYuan LLM Wiki Manager
 
 ## Overview
 
-Manage a personal LLM Wiki on top of SiYuan. The skill turns raw inputs into reusable cards, keeps relationships queryable through SiYuan `attributes` and `refs`, and grows the system toward a long-term LLM context layer.
+Manage a personal LLM Wiki built on SiYuan Notes / 思源笔记. The skill turns raw inputs into reusable SiYuan cards, keeps relationships queryable through SiYuan `attributes` and `refs`, and grows the notebook toward a long-term LLM context layer.
 
 Use the existing `siyuan-skill` when available for live SiYuan writes. Use this skill's scripts for read-only SQL inspection and audits.
 
@@ -19,7 +19,7 @@ Before making live changes, identify:
 - Target notebook: prefer `SIYUAN_LLM_WIKI_NOTEBOOK`; otherwise discover a notebook named `llm wiki`.
 - Current structure: `00 收集箱`, `10 概念卡`, `20 来源笔记`, `30 项目知识`, `40 长期问题`, `80 模板`, `90 主题地图`.
 
-For detailed design, read `references/architecture.md`. For SQL, read `references/sql-recipes.md`. For card formats, read `references/card-templates.md`.
+For the public technical design, read `../../docs/siyuan-llm-wiki-architecture.md` when working in this repository. Treat the SiYuan `llm wiki` notebook as the source of truth for actual note content; do not maintain or commit LLM Wiki notes in this public GitHub repository. For SQL, read `references/sql-recipes.md`. For card formats, read `references/card-templates.md`.
 
 ## Core Workflow
 
@@ -62,10 +62,10 @@ When writing to SiYuan:
 Useful commands:
 
 ```bash
-node /Users/guangyu/.codex/skills/siyuan-skill/siyuan.js search "关键词" --limit 10
-node /Users/guangyu/.codex/skills/siyuan-skill/siyuan.js create "标题" "内容" --parent-id <parentId>
-node /Users/guangyu/.codex/skills/siyuan-skill/siyuan.js update <docId> "完整 Markdown"
-node /Users/guangyu/.codex/skills/siyuan-skill/siyuan.js attrs <docId> --set "type=concept,status=draft,keywords=..."
+node "${CODEX_HOME:-$HOME/.codex}/skills/siyuan-skill/siyuan.js" search "关键词" --limit 10
+node "${CODEX_HOME:-$HOME/.codex}/skills/siyuan-skill/siyuan.js" create "标题" "内容" --parent-id <parentId>
+node "${CODEX_HOME:-$HOME/.codex}/skills/siyuan-skill/siyuan.js" update <docId> "完整 Markdown"
+node "${CODEX_HOME:-$HOME/.codex}/skills/siyuan-skill/siyuan.js" attrs <docId> --set "type=concept,status=draft,keywords=..."
 ```
 
 ## Read-Only Audits
@@ -73,11 +73,11 @@ node /Users/guangyu/.codex/skills/siyuan-skill/siyuan.js attrs <docId> --set "ty
 Use `scripts/siyuan-query.js` for repeatable SQL checks:
 
 ```bash
-node skills/llm-wiki-manager/scripts/siyuan-query.js card-index
-node skills/llm-wiki-manager/scripts/siyuan-query.js cards --type concept
-node skills/llm-wiki-manager/scripts/siyuan-query.js search RAG
-node skills/llm-wiki-manager/scripts/siyuan-query.js refs-to <blockId>
-node skills/llm-wiki-manager/scripts/siyuan-query.js orphan-cards
+node skills/siyuan-llm-wiki-manager/scripts/siyuan-query.js card-index
+node skills/siyuan-llm-wiki-manager/scripts/siyuan-query.js cards --type concept
+node skills/siyuan-llm-wiki-manager/scripts/siyuan-query.js search RAG
+node skills/siyuan-llm-wiki-manager/scripts/siyuan-query.js refs-to <blockId>
+node skills/siyuan-llm-wiki-manager/scripts/siyuan-query.js orphan-cards
 ```
 
 The script is read-only and only calls `/api/query/sql`.

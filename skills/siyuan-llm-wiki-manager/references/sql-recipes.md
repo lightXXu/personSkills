@@ -1,6 +1,6 @@
 # SQL Recipes
 
-Set `BOX_ID` mentally to the target notebook id, for example `20260613180103-7eoumqs`.
+Set `BOX_ID` mentally to the target notebook id.
 
 ## Card Index
 
