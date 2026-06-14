@@ -1,0 +1,7 @@
+interface:
+  display_name: "LLM Wiki 管理"
+  short_description: "管理思源中的 LLM Wiki 知识系统"
+  default_prompt: "Use $llm-wiki-manager to ingest new material into my SiYuan LLM Wiki."
+
+policy:
+  allow_implicit_invocation: true
