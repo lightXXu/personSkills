@@ -430,6 +430,362 @@ WHERE a.box = 'BOX_ID'
 - 不建议为了字段完整而增加过重模板。
 - 不建议把所有链接都改成块引用，只处理关键关系。
 
+## 20260619 TODO：siyuan-llm-wiki-manager 优化清单
+
+以下 TODO 基于当前对话中对 Karpathy LLM Wiki pattern、思源底座、无向量 MVP、冲突处理和持续编译流程的讨论整理。目标不是推翻当前方案，而是在现有 `siyuan-llm-wiki-manager` skill 基础上补齐边界、生命周期、审计和模板能力。
+
+### TODO 1：明确 SiYuan-native LLM Wiki 定位
+
+当前方案已经强调正式知识内容以思源 `llm wiki` 笔记本为准，不在公开仓库长期维护真实 Wiki 内容。建议在 skill 和架构文档中进一步明确：
+
+```text
+本实现采用 SiYuan-native LLM Wiki：概念卡、来源卡、项目卡、问题卡和主题地图就是编译后的 Wiki 页面。
+Markdown 只是草稿格式和写入格式，不是另一个长期知识存储层。
+思源笔记本是正式 Wiki 层，原始资料和卡片通过 block_id / refs / attributes 保持可追溯。
+```
+
+需要更新：
+
+- `SKILL.md` 的 Overview / Required Context。
+- `card-templates.md` 的说明前言。
+- 架构文档中关于 Markdown 草稿的表述，避免误解为另起一套 Markdown Wiki。
+
+完成标准：
+
+- 读者能明确区分：原始来源、思源卡片 Wiki、Markdown 草稿。
+- 文档中不再暗示需要在 GitHub 仓库维护一套长期 Markdown Wiki 内容。
+
+### TODO 2：补齐知识生命周期状态
+
+当前推荐状态包含：
+
+```text
+draft
+stable
+active
+open
+archived
+template
+```
+
+建议扩展为：
+
+```text
+draft        草稿
+stable       稳定结论
+active       正在使用
+open         未决问题
+stale        可能过期，需要复审
+superseded   已被新卡或新判断取代
+contradicted 与其他来源或卡片存在冲突
+archived     归档
+template     模板
+```
+
+需要更新：
+
+- `SKILL.md` 的 `custom-status` 说明。
+- `card-templates.md` 中每类卡片的状态选项。
+- `siyuan-query.js` 增加按状态查询的通用命令或专门命令。
+
+完成标准：
+
+- 卡片能表达“过期、被取代、存在冲突”这三种维护状态。
+- 后续审计能直接查询这些状态。
+
+### TODO 3：增加冲突处理结构
+
+Karpathy LLM Wiki pattern 里需要周期性发现 contradictions / stale claims。当前架构文档已经提到冲突检测，但 skill 层还缺少显式结构。
+
+建议增加字段：
+
+```text
+custom-conflict-status: open|resolved|ignored|superseded
+custom-supersedes: block_id
+custom-superseded-by: block_id
+custom-decision-source: block_id
+custom-resolution-note: 简短说明
+```
+
+也可以新增 `conflict` 类型卡：
+
+```text
+custom-type: conflict
+custom-status: open|resolved|ignored|archived
+custom-confidence: high|medium|low
+custom-keywords: ...
+```
+
+冲突卡建议记录：
+
+- 冲突主题。
+- 观点 A 与来源引用。
+- 观点 B 与来源引用。
+- 冲突类型：事实冲突 / 方案迭代 / 观点分歧 / 任务冲突。
+- 当前裁决或处理建议。
+- 决策来源和确认时间。
+
+完成标准：
+
+- 系统不会静默合并互相矛盾的判断。
+- 重要冲突可以被查询、展示、解决或忽略。
+
+### TODO 4：把“新知识编译流程”写入 skill 工作流
+
+当前 Core Workflow 已有 Collect / Extract / Search / Decide / Write / Link / Update maps / Validate。建议补充“持续编译”视角：
+
+```text
+Detect source change
+  -> Compare existing cards
+  -> Mark affected cards stale
+  -> Generate update proposal
+  -> Human approves write
+  -> Verify attributes / refs
+```
+
+建议在 `SKILL.md` 中新增或调整流程：
+
+1. 检测新增/修改材料。
+2. 抽取 claims、keywords、sources、projects、open questions。
+3. 先查主题地图，再查概念卡、项目卡、问题卡、来源卡。
+4. 判断更新旧卡、新建卡、标记 stale、记录 conflict。
+5. 生成草稿，但不直接覆盖用户内容。
+6. 用户确认后写入思源。
+7. 设置 `custom-*` 属性。
+8. 建立关键 block refs。
+9. SQL 验证 attributes / refs。
+10. 更新主题地图或审计清单。
+
+完成标准：
+
+- skill 不只是“建卡片”，而是负责维护一个会演化的 Wiki。
+- 新材料能触发旧卡更新、stale 标记和 conflict 记录。
+
+### TODO 5：升级搜索命令，增加 FTS/BM25 优先召回
+
+当前 `siyuan-query.js search` 使用：
+
+```sql
+content LIKE '%KEYWORD%'
+```
+
+这适合 MVP 起步，但卡片变多后召回质量和性能会受限。建议增加命令：
+
+```bash
+siyuan-query.js fts-search <keyword> [--box <notebookId>] [--limit 30]
+siyuan-query.js search <keyword> --mode fts|like
+```
+
+实现建议：
+
+- 优先查询思源已有 `blocks_fts` 或 `blocks_fts_case_insensitive`。
+- 如果 FTS 查询失败，再 fallback 到 `LIKE`。
+- 返回字段保持和当前 search 兼容：`id`、`content`、`type`、`hpath`、`root_id`、`updated`。
+
+完成标准：
+
+- 新知识接入前的检索不只依赖 LIKE。
+- 大量卡片下仍能快速找到候选旧卡。
+
+### TODO 6：补齐 Karpathy Lint / 知识审计命令
+
+当前已有：
+
+```text
+low-confidence
+untyped
+orphan-cards
+recent
+refs-to
+```
+
+建议新增：
+
+```text
+stale-cards              查询 custom-status = stale
+contradicted-cards       查询 custom-status = contradicted 或 custom-conflict-status = open
+superseded-cards         查询 custom-status = superseded
+missing-source-cards     查询缺少来源引用的概念卡/判断卡
+old-active-cards         查询长期未更新但仍 active 的卡片
+inbox-aging              查询收集箱中长期未处理材料
+map-coverage             查询未被主题地图引用的核心卡片
+duplicate-keywords       查询关键词高度重复的卡片候选
+cards-by-status          通用状态查询
+cards-by-keyword         按 custom-keywords 查询
+```
+
+这些命令对应 Karpathy LLM Wiki 的 Lint 思路：发现过期、孤立、低置信度、冲突、缺少引用和覆盖不足。
+
+完成标准：
+
+- 每周可以生成一份审计清单。
+- 审计优先级高于过早引入向量库。
+
+### TODO 7：补齐 Question / Map / Conflict 模板
+
+当前 `card-templates.md` 已有 Concept / Source / Project 模板，但 skill 已经把 `question` 和 `map` 作为核心类型。建议补齐：
+
+#### Question Card
+
+建议结构：
+
+```markdown
+# 问题名
+
+## 检索属性
+
+- 类型：长期问题
+- 状态：开放 / 已解决 / 暂停 / 归档
+- 置信度：高 / 中 / 低
+- 关键词：
+- 更新时间：
+
+## 问题描述
+
+## 为什么重要
+
+## 当前已知
+
+## 可能答案
+
+## 反证 / 风险
+
+## 相关来源
+
+- 优先使用 ((块ID "来源标题"))
+
+## 相关概念 / 项目
+
+## 下一步验证
+```
+
+#### Map Card
+
+建议结构：
+
+```markdown
+# 主题地图名
+
+## 检索属性
+
+- 类型：主题地图
+- 状态：活跃 / 稳定 / 待整理 / 归档
+- 关键词：
+- 更新时间：
+
+## 这个主题解决什么问题
+
+## 当前共识
+
+## 必读卡片
+
+- 概念：
+- 来源：
+- 项目：
+- 问题：
+
+## 关键路径
+
+## 冲突 / 未决
+
+## 最近更新
+```
+
+#### Conflict Card
+
+建议结构：
+
+```markdown
+# 冲突主题
+
+## 检索属性
+
+- 类型：冲突卡
+- 状态：开放 / 已解决 / 忽略 / 归档
+- 置信度：高 / 中 / 低
+- 关键词：
+- 更新时间：
+
+## 冲突摘要
+
+## 观点 A
+
+- 说法：
+- 来源：
+
+## 观点 B
+
+- 说法：
+- 来源：
+
+## 冲突类型
+
+- 事实冲突 / 方案迭代 / 观点分歧 / 任务冲突
+
+## 当前处理
+
+- 当前采用：
+- 原因：
+- 决策来源：
+
+## 后续动作
+```
+
+完成标准：
+
+- LLM 写 question/map/conflict 卡时有固定结构。
+- 冲突不会被塞进普通概念卡后丢失。
+
+### TODO 8：让 live write 路径更稳
+
+当前文档示例默认：
+
+```bash
+${CODEX_HOME:-$HOME/.codex}/skills/siyuan-skill/siyuan.js
+```
+
+但不同环境可能存在：
+
+```text
+$CODEX_HOME/skills/siyuan-skill/siyuan.js
+$HOME/.codex/skills/siyuan-skill/siyuan.js
+$HOME/.openclaw/skills/siyuan-skill/siyuan.js
+其他 personal skills 路径
+```
+
+建议增加探测策略：
+
+1. 优先使用 `SIYUAN_SKILL_PATH`。
+2. 再查 `$CODEX_HOME/skills/siyuan-skill/siyuan.js`。
+3. 再查 `$HOME/.codex/skills/siyuan-skill/siyuan.js`。
+4. 再查 `$HOME/.openclaw/skills/siyuan-skill/siyuan.js`。
+5. 找不到时提示用户配置路径。
+
+完成标准：
+
+- skill 在 Codex、OpenClaw 或个人 workspace 中都能稳定找到 live write 工具。
+- 文档示例不绑定单一路径。
+
+### 推荐实施顺序
+
+优先级从高到低：
+
+1. 明确 SiYuan-native LLM Wiki 定位。
+2. 扩展状态生命周期：`stale`、`superseded`、`contradicted`。
+3. 补齐 Question / Map / Conflict 模板。
+4. 新增 audit/lint 查询命令。
+5. 增加 FTS/BM25 搜索命令。
+6. 把新知识编译流程写入 `SKILL.md`。
+7. 增加冲突字段或冲突卡类型。
+8. 优化 live write 路径探测。
+
+暂时仍不建议提前做：
+
+- 全量向量化；
+- 复杂外部 RAG；
+- 自动覆盖用户卡片；
+- 把真实 LLM Wiki 内容提交到公开 GitHub 仓库。
+
 ## 最终判断
 
 终局是一个基于思源块系统的个人 LLM 上下文系统。当前设计是抵达这个终局的最小可行起点，而不是临时玩具。
