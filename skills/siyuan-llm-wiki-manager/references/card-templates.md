@@ -1,5 +1,9 @@
 # Card Templates
 
+These templates describe SiYuan-native LLM Wiki cards. The SiYuan `llm wiki` notebook is the source of truth for the compiled Wiki; Markdown is only a draft, interchange, or write format.
+
+Use machine-readable custom attribute values first, with Chinese explanations only as reading aids. Keep `custom-type` and `custom-status` values in English so SQL audits remain reliable.
+
 ## Concept Card
 
 ```markdown
@@ -7,8 +11,8 @@
 
 ## 检索属性
 
-- 类型：概念卡
-- 状态：草稿 / 稳定 / 待验证
+- 类型：concept 概念卡
+- 状态：draft 草稿 / active 使用中 / stable 稳定 / stale 待复审 / archived 归档
 - 置信度：高 / 中 / 低
 - 关键词：
 - 更新时间：
@@ -17,15 +21,15 @@
 
 ## 什么时候用
 
-- 
+-
 
 ## 关键判断
 
-- 
+-
 
 ## 反例 / 边界
 
-- 
+-
 
 ## 证据 / 来源
 
@@ -52,8 +56,8 @@
 
 ## 检索属性
 
-- 类型：来源笔记
-- 状态：待处理 / 已提炼 / 已归档
+- 类型：source 来源笔记
+- 状态：draft 待处理 / active 提炼中 / stable 已提炼 / stale 待复审 / archived 归档
 - 置信度：高 / 中 / 低
 - 关键词：
 - 更新时间：
@@ -73,7 +77,7 @@
 
 ## 值得沉淀的概念
 
-- 
+-
 
 ## 我的判断
 
@@ -95,8 +99,8 @@
 
 ## 检索属性
 
-- 类型：项目卡
-- 状态：进行中 / 暂停 / 完成 / 归档
+- 类型：project 项目卡
+- 状态：draft 草稿 / active 进行中 / stable 稳定 / stale 待复审 / archived 归档
 - 关键词：
 - 更新时间：
 
@@ -114,13 +118,92 @@
 
 ## 当前判断
 
-- 
+-
 
 ## 下一步行动
 
-- 
+-
 
 ## 复盘
 
-- 
+-
+```
+
+## Question Card
+
+```markdown
+# 问题名
+
+## 检索属性
+
+- 类型：question 长期问题
+- 状态：draft 草稿 / active 验证中 / stable 已解决 / stale 待复审 / archived 归档
+- 置信度：高 / 中 / 低
+- 关键词：
+- 更新时间：
+
+## 问题描述
+
+## 为什么重要
+
+## 当前已知
+
+- ...
+
+## 可能答案
+
+- ...
+
+## 反证 / 风险
+
+- ...
+
+## 相关来源
+
+- 优先使用 `((块ID "来源标题"))`
+
+## 相关概念 / 项目
+
+- 概念：优先使用 `((块ID "概念标题"))`
+- 项目：优先使用 `((块ID "项目标题"))`
+
+## 下一步验证
+
+- ...
+```
+
+## Map Card
+
+```markdown
+# 主题地图名
+
+## 检索属性
+
+- 类型：map 主题地图
+- 状态：active 活跃 / stable 稳定 / stale 待整理 / archived 归档
+- 关键词：
+- 更新时间：
+
+## 这个主题解决什么问题
+
+## 当前共识
+
+## 必读卡片
+
+- 概念：
+- 来源：
+- 项目：
+- 问题：
+
+## 关键路径
+
+- ...
+
+## 冲突 / 未决
+
+- 优先使用 `((块ID "问题标题"))`
+
+## 最近更新
+
+- ...
 ```

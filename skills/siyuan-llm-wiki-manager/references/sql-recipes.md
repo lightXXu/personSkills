@@ -59,6 +59,58 @@ WHERE a.box = 'BOX_ID'
 ORDER BY b.hpath;
 ```
 
+## Cards by Status
+
+```sql
+SELECT b.id, b.content AS title, t.value AS card_type, s.value AS status, b.hpath, b.updated
+FROM attributes s
+JOIN blocks b ON b.id = s.block_id
+LEFT JOIN attributes t
+  ON t.block_id = b.id AND t.name = 'custom-type'
+WHERE s.box = 'BOX_ID'
+  AND s.name = 'custom-status'
+  AND s.value = 'stale'
+ORDER BY t.value, b.updated DESC, b.hpath;
+```
+
+## Cards by Keyword
+
+Use this for pipe-separated `custom-keywords` values such as `llm-wiki|siyuan|context`.
+
+```sql
+SELECT b.id, b.content AS title, t.value AS card_type, k.value AS keywords, b.hpath, b.updated
+FROM attributes k
+JOIN blocks b ON b.id = k.block_id
+LEFT JOIN attributes t
+  ON t.block_id = b.id AND t.name = 'custom-type'
+WHERE k.box = 'BOX_ID'
+  AND k.name = 'custom-keywords'
+  AND (
+    k.value = 'KEYWORD'
+    OR k.value LIKE 'KEYWORD|%'
+    OR k.value LIKE '%|KEYWORD|%'
+    OR k.value LIKE '%|KEYWORD'
+  )
+ORDER BY t.value, b.updated DESC, b.hpath;
+```
+
+## Old Active Cards
+
+Replace `YYYYMMDDHHmmss` with the review cutoff timestamp.
+
+```sql
+SELECT b.id, b.content AS title, t.value AS card_type, s.value AS status, b.hpath, b.updated
+FROM attributes s
+JOIN blocks b ON b.id = s.block_id
+LEFT JOIN attributes t
+  ON t.block_id = b.id AND t.name = 'custom-type'
+WHERE s.box = 'BOX_ID'
+  AND s.name = 'custom-status'
+  AND s.value = 'active'
+  AND b.updated < 'YYYYMMDDHHmmss'
+ORDER BY b.updated ASC, t.value, b.hpath;
+```
+
 ## Untyped Documents
 
 ```sql

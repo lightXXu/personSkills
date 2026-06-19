@@ -19,7 +19,18 @@ scripts/
 
 ## Included Skills
 
-- `siyuan-llm-wiki-manager`: Manage an LLM Wiki knowledge system built on SiYuan Notes / 思源笔记.
+- [`siyuan-llm-wiki-manager`](docs/siyuan-llm-wiki-manager-usage.md) ([中文](docs/siyuan-llm-wiki-manager-usage.zh-CN.md)): Manage an LLM Wiki knowledge system built on SiYuan Notes / 思源笔记.
+
+## Install Locally
+
+Install a skill into Codex's user skill directory:
+
+```bash
+mkdir -p "$HOME/.codex/skills/siyuan-llm-wiki-manager"
+rsync -a --exclude '.DS_Store' \
+  skills/siyuan-llm-wiki-manager/ \
+  "$HOME/.codex/skills/siyuan-llm-wiki-manager/"
+```
 
 ## Public Boundary
 

@@ -2,29 +2,53 @@
 
 const http = require("http");
 const https = require("https");
+const fs = require("fs");
+const os = require("os");
+const path = require("path");
 
-const baseURL = process.env.SIYUAN_BASE_URL || "http://localhost:6806";
+const localConfig = loadLocalConfig();
+const baseURL = process.env.SIYUAN_BASE_URL || localConfig.baseURL || "http://localhost:6806";
 const token = process.env.SIYUAN_TOKEN || "";
-const notebook = process.env.SIYUAN_LLM_WIKI_NOTEBOOK || process.env.SIYUAN_DEFAULT_NOTEBOOK || "";
+const notebook = process.env.SIYUAN_LLM_WIKI_NOTEBOOK || localConfig.notebook || "";
 
 function usage() {
   console.log(`Usage:
   siyuan-query.js tables
   siyuan-query.js card-index [--box <notebookId>]
-  siyuan-query.js cards --type <concept|source|project|question|map|template|design|index> [--box <notebookId>]
+  siyuan-query.js cards --type <concept|source|project|question|map|template> [--box <notebookId>]
   siyuan-query.js search <keyword> [--box <notebookId>]
   siyuan-query.js refs-to <blockId> [--box <notebookId>]
   siyuan-query.js low-confidence [--box <notebookId>]
   siyuan-query.js untyped [--box <notebookId>]
   siyuan-query.js orphan-cards [--box <notebookId>]
+  siyuan-query.js cards-by-status --status <draft|active|stable|stale|archived> [--box <notebookId>]
+  siyuan-query.js stale-cards [--box <notebookId>]
+  siyuan-query.js cards-by-keyword --keyword <keyword> [--box <notebookId>]
+  siyuan-query.js old-active-cards [--days 30] [--box <notebookId>]
   siyuan-query.js recent [--limit 20] [--box <notebookId>]
 
 Environment:
   SIYUAN_BASE_URL              default: http://localhost:6806
   SIYUAN_TOKEN                 required if SiYuan auth is enabled
   SIYUAN_LLM_WIKI_NOTEBOOK     preferred notebook id
-  SIYUAN_DEFAULT_NOTEBOOK      fallback notebook id
+
+Local config:
+  ~/.config/personSkills/siyuan-llm-wiki.json
+                                {"notebook":"<notebookId>","baseURL":"http://localhost:6806"}
 `);
+}
+
+function loadLocalConfig() {
+  const configDir = process.env.XDG_CONFIG_HOME || path.join(os.homedir(), ".config");
+  const configPath = path.join(configDir, "personSkills", "siyuan-llm-wiki.json");
+  if (!fs.existsSync(configPath)) return {};
+
+  try {
+    const parsed = JSON.parse(fs.readFileSync(configPath, "utf8"));
+    return parsed && typeof parsed === "object" ? parsed : {};
+  } catch (error) {
+    throw new Error(`Failed to read ${configPath}: ${error.message}`);
+  }
 }
 
 function argValue(name, fallback = "") {
@@ -36,10 +60,23 @@ function sqlString(value) {
   return String(value).replace(/'/g, "''");
 }
 
+function cutoffUpdated(days) {
+  const date = new Date(Date.now() - days * 24 * 60 * 60 * 1000);
+  const pad = value => String(value).padStart(2, "0");
+  return [
+    date.getFullYear(),
+    pad(date.getMonth() + 1),
+    pad(date.getDate()),
+    pad(date.getHours()),
+    pad(date.getMinutes()),
+    pad(date.getSeconds()),
+  ].join("");
+}
+
 function getBox() {
   const box = argValue("--box", notebook);
   if (!box) {
-    throw new Error("Missing notebook id. Pass --box or set SIYUAN_LLM_WIKI_NOTEBOOK.");
+    throw new Error("Missing notebook id. Pass --box, set SIYUAN_LLM_WIKI_NOTEBOOK, or create ~/.config/personSkills/siyuan-llm-wiki.json.");
   }
   return box;
 }
@@ -183,6 +220,66 @@ WHERE t.box = '${box}'
   AND t.value IN ('concept', 'source', 'project', 'question', 'map')
   AND r.id IS NULL
 ORDER BY t.value, b.hpath`));
+  }
+
+  if (command === "cards-by-status") {
+    const status = sqlString(argValue("--status"));
+    if (!status) throw new Error("cards-by-status requires --status");
+    return print(await query(`
+SELECT b.id, b.content AS title, t.value AS card_type, s.value AS status, b.hpath, b.updated
+FROM attributes s
+JOIN blocks b ON b.id = s.block_id
+LEFT JOIN attributes t ON t.block_id = b.id AND t.name = 'custom-type'
+WHERE s.box = '${box}'
+  AND s.name = 'custom-status'
+  AND s.value = '${status}'
+ORDER BY t.value, b.updated DESC, b.hpath`));
+  }
+
+  if (command === "stale-cards") {
+    return print(await query(`
+SELECT b.id, b.content AS title, t.value AS card_type, s.value AS status, b.hpath, b.updated
+FROM attributes s
+JOIN blocks b ON b.id = s.block_id
+LEFT JOIN attributes t ON t.block_id = b.id AND t.name = 'custom-type'
+WHERE s.box = '${box}'
+  AND s.name = 'custom-status'
+  AND s.value = 'stale'
+ORDER BY t.value, b.updated DESC, b.hpath`));
+  }
+
+  if (command === "cards-by-keyword") {
+    const keyword = sqlString(argValue("--keyword"));
+    if (!keyword) throw new Error("cards-by-keyword requires --keyword");
+    return print(await query(`
+SELECT b.id, b.content AS title, t.value AS card_type, k.value AS keywords, b.hpath, b.updated
+FROM attributes k
+JOIN blocks b ON b.id = k.block_id
+LEFT JOIN attributes t ON t.block_id = b.id AND t.name = 'custom-type'
+WHERE k.box = '${box}'
+  AND k.name = 'custom-keywords'
+  AND (
+    k.value = '${keyword}'
+    OR k.value LIKE '${keyword}|%'
+    OR k.value LIKE '%|${keyword}|%'
+    OR k.value LIKE '%|${keyword}'
+  )
+ORDER BY t.value, b.updated DESC, b.hpath`));
+  }
+
+  if (command === "old-active-cards") {
+    const days = Math.max(1, Math.min(parseInt(argValue("--days", "30"), 10) || 30, 3650));
+    const cutoff = cutoffUpdated(days);
+    return print(await query(`
+SELECT b.id, b.content AS title, t.value AS card_type, s.value AS status, b.hpath, b.updated
+FROM attributes s
+JOIN blocks b ON b.id = s.block_id
+LEFT JOIN attributes t ON t.block_id = b.id AND t.name = 'custom-type'
+WHERE s.box = '${box}'
+  AND s.name = 'custom-status'
+  AND s.value = 'active'
+  AND b.updated < '${cutoff}'
+ORDER BY b.updated ASC, t.value, b.hpath`));
   }
 
   if (command === "recent") {
