@@ -1,1 +1,7 @@
 .DS_Store
+
+# Local skill credentials and machine-specific config.
+skills/**/.env
+skills/**/.env.*
+skills/**/config.json
+skills/**/*.local

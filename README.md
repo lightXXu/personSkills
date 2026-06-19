@@ -19,6 +19,7 @@ scripts/
 
 ## Included Skills
 
+- [`siyuan-skill`](skills/siyuan-skill/README.md): SiYuan Notes CLI tool for notebook, document, search, and block operations.
 - [`siyuan-llm-wiki-manager`](docs/siyuan-llm-wiki-manager-usage.md) ([中文](docs/siyuan-llm-wiki-manager-usage.zh-CN.md)): Manage an LLM Wiki knowledge system built on SiYuan Notes / 思源笔记.
 
 ## Install Locally
