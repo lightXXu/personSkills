@@ -1,6 +1,6 @@
 # SiYuan LLM Wiki Manager 使用说明
 
-[English](siyuan-llm-wiki-manager-usage.md)
+[English](README.md)
 
 ## 定位
 
@@ -74,6 +74,7 @@ notebook 解析优先级是：`--box`、`SIYUAN_LLM_WIKI_NOTEBOOK`、`~/.config/
 以下命令只调用思源 `/api/query/sql`：
 
 ```bash
+node skills/siyuan-llm-wiki-manager/scripts/siyuan-query.js preflight
 node skills/siyuan-llm-wiki-manager/scripts/siyuan-query.js card-index
 node skills/siyuan-llm-wiki-manager/scripts/siyuan-query.js cards --type concept
 node skills/siyuan-llm-wiki-manager/scripts/siyuan-query.js cards-by-status --status stale
@@ -82,9 +83,14 @@ node skills/siyuan-llm-wiki-manager/scripts/siyuan-query.js cards-by-keyword --k
 node skills/siyuan-llm-wiki-manager/scripts/siyuan-query.js old-active-cards --days 30
 node skills/siyuan-llm-wiki-manager/scripts/siyuan-query.js refs-to <blockId>
 node skills/siyuan-llm-wiki-manager/scripts/siyuan-query.js orphan-cards
+node skills/siyuan-llm-wiki-manager/scripts/siyuan-query.js topic-summary "AI Coding / Agent 工作方式"
 ```
 
 使用 `--box <notebookId>` 可以为单次命令覆盖环境变量中的 notebook id。
+
+环境状态不确定时，先跑 `preflight`。它只读检查思源连接、SQL 读取能力、目标 notebook、标准目录和核心卡片属性，不写入数据。
+
+`topic-summary` 是运行时检索视图。它返回命中的 typed cards，并把证据片段按根卡片聚合，同时保留每个片段的 `root_id`；它不会创建或更新笔记。
 
 ## 工作流
 

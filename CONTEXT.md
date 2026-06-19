@@ -4,11 +4,12 @@ This repository stores reusable Codex skills.
 
 Skill folders live under `skills/`. Each skill should include a required `SKILL.md` and may include:
 
+- `README.md` for human-facing usage, install notes, and marketplace-style overview;
 - `agents/openai.yaml` for UI metadata;
 - `references/` for longer optional context;
 - `scripts/` for deterministic helper commands.
 
-Keep root-level documentation short. Put task-specific knowledge inside the relevant skill.
+Keep root-level documentation short. Put task-specific knowledge inside the relevant skill. Agent-critical instructions must still live in `SKILL.md` or files that `SKILL.md` explicitly tells the agent to read; a skill `README.md` is not an automatic model context source.
 
 ## SiYuan LLM Wiki Boundary
 

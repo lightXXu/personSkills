@@ -10,6 +10,7 @@ Canonical repository: <https://github.com/lightXXu/personSkills>
 skills/
   <skill-name>/
     SKILL.md
+    README.md
     agents/openai.yaml
     references/
     scripts/
@@ -20,7 +21,7 @@ scripts/
 ## Included Skills
 
 - [`siyuan-skill`](skills/siyuan-skill/README.md): SiYuan Notes CLI tool for notebook, document, search, and block operations.
-- [`siyuan-llm-wiki-manager`](docs/siyuan-llm-wiki-manager-usage.md) ([中文](docs/siyuan-llm-wiki-manager-usage.zh-CN.md)): Manage an LLM Wiki knowledge system built on SiYuan Notes / 思源笔记.
+- [`siyuan-llm-wiki-manager`](skills/siyuan-llm-wiki-manager/README.md) ([中文](skills/siyuan-llm-wiki-manager/README.zh-CN.md)): Manage an LLM Wiki knowledge system built on SiYuan Notes / 思源笔记.
 
 ## Install Locally
 

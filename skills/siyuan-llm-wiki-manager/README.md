@@ -1,6 +1,6 @@
 # SiYuan LLM Wiki Manager Usage Guide
 
-[简体中文](siyuan-llm-wiki-manager-usage.zh-CN.md)
+[简体中文](README.zh-CN.md)
 
 ## Purpose
 
@@ -74,6 +74,7 @@ For live writes, use the separate `siyuan-skill` CLI when available. Writes, ove
 The following commands only call SiYuan `/api/query/sql`:
 
 ```bash
+node skills/siyuan-llm-wiki-manager/scripts/siyuan-query.js preflight
 node skills/siyuan-llm-wiki-manager/scripts/siyuan-query.js card-index
 node skills/siyuan-llm-wiki-manager/scripts/siyuan-query.js cards --type concept
 node skills/siyuan-llm-wiki-manager/scripts/siyuan-query.js cards-by-status --status stale
@@ -82,9 +83,14 @@ node skills/siyuan-llm-wiki-manager/scripts/siyuan-query.js cards-by-keyword --k
 node skills/siyuan-llm-wiki-manager/scripts/siyuan-query.js old-active-cards --days 30
 node skills/siyuan-llm-wiki-manager/scripts/siyuan-query.js refs-to <blockId>
 node skills/siyuan-llm-wiki-manager/scripts/siyuan-query.js orphan-cards
+node skills/siyuan-llm-wiki-manager/scripts/siyuan-query.js topic-summary "AI Coding / Agent 工作方式"
 ```
 
 Use `--box <notebookId>` to override the notebook id for one command.
+
+Use `preflight` before live read or write workflows when the local environment is uncertain. It checks SiYuan connectivity, SQL read access, the target notebook, standard folders, and core card attributes without writing data.
+
+Use `topic-summary` as a runtime retrieval view. It returns matched typed cards and evidence snippets grouped by root card, including each snippet's `root_id`, but it does not create or update notes.
 
 ## Card Workflow
 

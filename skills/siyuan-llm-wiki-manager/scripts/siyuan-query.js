@@ -14,6 +14,7 @@ const notebook = process.env.SIYUAN_LLM_WIKI_NOTEBOOK || localConfig.notebook ||
 function usage() {
   console.log(`Usage:
   siyuan-query.js tables
+  siyuan-query.js preflight [--box <notebookId>]
   siyuan-query.js card-index [--box <notebookId>]
   siyuan-query.js cards --type <concept|source|project|question|map|template> [--box <notebookId>]
   siyuan-query.js search <keyword> [--box <notebookId>]
@@ -26,6 +27,7 @@ function usage() {
   siyuan-query.js cards-by-keyword --keyword <keyword> [--box <notebookId>]
   siyuan-query.js old-active-cards [--days 30] [--box <notebookId>]
   siyuan-query.js recent [--limit 20] [--box <notebookId>]
+  siyuan-query.js topic-summary <topic> [--limit 12] [--box <notebookId>]
 
 Environment:
   SIYUAN_BASE_URL              default: http://localhost:6806
@@ -60,6 +62,76 @@ function sqlString(value) {
   return String(value).replace(/'/g, "''");
 }
 
+function unique(values) {
+  return [...new Set(values.filter(Boolean))];
+}
+
+function topicTerms(topic) {
+  const normalized = String(topic).trim();
+  const parts = normalized
+    .split(/[\s,，;；/／|｜]+/u)
+    .map(part => part.trim())
+    .filter(part => part.length >= 2);
+  return unique([normalized, ...parts]);
+}
+
+function keywordMatches(keywords, terms) {
+  const value = String(keywords || "").toLowerCase();
+  return terms.some(term => value.includes(String(term).toLowerCase()));
+}
+
+function dedupeById(rows) {
+  const rowsById = new Map();
+  for (const row of rows) {
+    if (!rowsById.has(row.id)) rowsById.set(row.id, row);
+  }
+  return [...rowsById.values()];
+}
+
+function dedupeSnippetsByRoot(rows) {
+  const rowsByRootAndId = new Map();
+  for (const row of rows) {
+    const key = `${row.root_id}:${row.id}`;
+    if (!rowsByRootAndId.has(key)) rowsByRootAndId.set(key, row);
+  }
+  return [...rowsByRootAndId.values()];
+}
+
+function groupByCard(rows) {
+  const grouped = new Map();
+  for (const row of rows) {
+    if (!grouped.has(row.root_id)) grouped.set(row.root_id, []);
+    grouped.get(row.root_id).push({
+      id: row.id,
+      root_id: row.root_id,
+      type: row.type,
+      content: row.content,
+      updated: row.updated,
+    });
+  }
+  return grouped;
+}
+
+function groupCardsByType(cards) {
+  const grouped = {};
+  for (const card of cards) {
+    const type = card.card_type || "unknown";
+    if (!grouped[type]) grouped[type] = [];
+    grouped[type].push(card);
+  }
+  return grouped;
+}
+
+function typeRank(type) {
+  return {
+    map: 1,
+    concept: 2,
+    project: 3,
+    question: 4,
+    source: 5,
+  }[type] || 9;
+}
+
 function cutoffUpdated(days) {
   const date = new Date(Date.now() - days * 24 * 60 * 60 * 1000);
   const pad = value => String(value).padStart(2, "0");
@@ -79,6 +151,32 @@ function getBox() {
     throw new Error("Missing notebook id. Pass --box, set SIYUAN_LLM_WIKI_NOTEBOOK, or create ~/.config/personSkills/siyuan-llm-wiki.json.");
   }
   return box;
+}
+
+function requestedBox() {
+  return argValue("--box", notebook);
+}
+
+function overallStatus(checks) {
+  if (checks.some(check => check.status === "fail")) return "fail";
+  if (checks.some(check => check.status === "warn")) return "warn";
+  return "ok";
+}
+
+async function check(name, fn) {
+  try {
+    return {
+      name,
+      status: "ok",
+      ...(await fn()),
+    };
+  } catch (error) {
+    return {
+      name,
+      status: "fail",
+      message: error.message,
+    };
+  }
 }
 
 async function post(endpoint, data) {
@@ -127,11 +225,227 @@ function print(rows) {
   console.log(JSON.stringify(rows, null, 2));
 }
 
+async function preflight() {
+  const box = requestedBox();
+  const expectedFolders = [
+    "/00 收集箱",
+    "/10 概念卡",
+    "/20 来源笔记",
+    "/30 项目知识",
+    "/40 长期问题",
+    "/80 模板",
+    "/90 主题地图",
+  ];
+
+  const checks = [];
+  checks.push(await check("siyuan-connection", async () => {
+    const version = await post("/api/system/version", {});
+    return { baseURL, version };
+  }));
+
+  checks.push(await check("sql-read", async () => {
+    const rows = await query("SELECT name FROM sqlite_master WHERE type='table' ORDER BY name LIMIT 5");
+    return { tableSample: rows.map(row => row.name) };
+  }));
+
+  if (!box) {
+    checks.push({
+      name: "notebook-config",
+      status: "fail",
+      message: "Missing notebook id. Pass --box, set SIYUAN_LLM_WIKI_NOTEBOOK, or create ~/.config/personSkills/siyuan-llm-wiki.json.",
+    });
+  } else {
+    const safeBox = sqlString(box);
+    checks.push(await check("notebook", async () => {
+      const rows = await query(`
+SELECT box, COUNT(*) AS block_count
+FROM blocks
+WHERE box = '${safeBox}'
+GROUP BY box`);
+      if (!rows.length) {
+        return {
+          status: "fail",
+          notebook: box,
+          message: "No blocks found for notebook id.",
+        };
+      }
+      return { notebook: box, blockCount: rows[0].block_count };
+    }));
+
+    checks.push(await check("standard-folders", async () => {
+      const inList = expectedFolders.map(folder => `'${sqlString(folder)}'`).join(", ");
+      const rows = await query(`
+SELECT hpath
+FROM blocks
+WHERE box = '${safeBox}'
+  AND type = 'd'
+  AND hpath IN (${inList})
+ORDER BY hpath`);
+      const found = rows.map(row => row.hpath);
+      const missing = expectedFolders.filter(folder => !found.includes(folder));
+      return {
+        status: missing.length ? "warn" : "ok",
+        found,
+        missing,
+      };
+    }));
+
+    checks.push(await check("card-attributes", async () => {
+      const rows = await query(`
+SELECT name, COUNT(*) AS count
+FROM attributes
+WHERE box = '${safeBox}'
+  AND name IN ('custom-type', 'custom-status', 'custom-keywords')
+GROUP BY name
+ORDER BY name`);
+      const counts = Object.fromEntries(rows.map(row => [row.name, row.count]));
+      const missing = ["custom-type", "custom-status", "custom-keywords"].filter(name => !counts[name]);
+      return {
+        status: missing.length ? "warn" : "ok",
+        counts,
+        missing,
+      };
+    }));
+  }
+
+  return {
+    command: "preflight",
+    mode: "read-only",
+    canWrite: false,
+    baseURL,
+    notebook: box || null,
+    hasToken: Boolean(token),
+    config: {
+      hasLocalConfig: Boolean(localConfig.baseURL || localConfig.notebook),
+      hasEnvBaseURL: Boolean(process.env.SIYUAN_BASE_URL),
+      hasEnvNotebook: Boolean(process.env.SIYUAN_LLM_WIKI_NOTEBOOK),
+      hasEnvToken: Boolean(process.env.SIYUAN_TOKEN),
+    },
+    status: overallStatus(checks),
+    checks,
+  };
+}
+
+async function topicSummary(box, topic, limit) {
+  const terms = topicTerms(topic);
+  if (!terms.length) throw new Error("topic-summary requires a topic");
+
+  const keywordCards = [];
+  const titleCards = [];
+  for (const term of terms) {
+    const value = sqlString(term);
+    keywordCards.push(...await query(`
+SELECT b.id,
+       b.content AS title,
+       t.value AS card_type,
+       s.value AS status,
+       k.value AS keywords,
+       b.hpath,
+       b.updated
+FROM attributes t
+JOIN blocks b ON b.id = t.block_id
+LEFT JOIN attributes s ON s.block_id = b.id AND s.name = 'custom-status'
+JOIN attributes k ON k.block_id = b.id AND k.name = 'custom-keywords'
+WHERE t.box = '${box}'
+  AND t.name = 'custom-type'
+  AND t.value IN ('map', 'concept', 'project', 'question', 'source')
+  AND (
+    k.value = '${value}'
+    OR k.value LIKE '${value}|%'
+    OR k.value LIKE '%|${value}|%'
+    OR k.value LIKE '%|${value}'
+    OR k.value LIKE '%${value}%'
+  )
+ORDER BY b.updated DESC, b.hpath
+LIMIT ${limit * 3}`));
+
+    titleCards.push(...await query(`
+SELECT b.id,
+       b.content AS title,
+       t.value AS card_type,
+       s.value AS status,
+       k.value AS keywords,
+       b.hpath,
+       b.updated
+FROM attributes t
+JOIN blocks b ON b.id = t.block_id
+LEFT JOIN attributes s ON s.block_id = b.id AND s.name = 'custom-status'
+LEFT JOIN attributes k ON k.block_id = b.id AND k.name = 'custom-keywords'
+WHERE t.box = '${box}'
+  AND t.name = 'custom-type'
+  AND t.value IN ('map', 'concept', 'project', 'question', 'source')
+  AND (b.content LIKE '%${value}%' OR b.hpath LIKE '%${value}%')
+ORDER BY b.updated DESC, b.hpath
+LIMIT ${limit * 3}`));
+  }
+
+  const cards = dedupeById([...keywordCards, ...titleCards]);
+
+  const rankedCards = cards
+    .map(card => ({
+      ...card,
+      match_rank: keywordMatches(card.keywords || "", terms) ? 1 : 2,
+    }))
+    .sort((left, right) =>
+      left.match_rank - right.match_rank
+      || typeRank(left.card_type) - typeRank(right.card_type)
+      || String(right.updated).localeCompare(String(left.updated))
+      || String(left.hpath).localeCompare(String(right.hpath)))
+    .slice(0, limit);
+
+  let snippetsByCard = new Map();
+  if (rankedCards.length) {
+    const ids = rankedCards.map(card => `'${sqlString(card.id)}'`).join(", ");
+    const snippetRows = [];
+    for (const term of terms) {
+      const value = sqlString(term);
+      snippetRows.push(...await query(`
+SELECT id, root_id, type, content, updated
+FROM blocks
+WHERE box = '${box}'
+  AND root_id IN (${ids})
+  AND type IN ('p', 'i', 'l', 'h')
+  AND content LIKE '%${value}%'
+ORDER BY root_id, updated DESC
+LIMIT ${limit * 8}`));
+    }
+    snippetsByCard = groupByCard(dedupeSnippetsByRoot(snippetRows));
+  }
+
+  const evidence = rankedCards.map(card => ({
+    card_id: card.id,
+    title: card.title,
+    card_type: card.card_type,
+    status: card.status || null,
+    keywords: card.keywords || null,
+    hpath: card.hpath,
+    updated: card.updated,
+    snippets: (snippetsByCard.get(card.id) || []).slice(0, 5),
+  }));
+
+  return {
+    topic,
+    mode: "read-only",
+    description: "Runtime topic summary input. This command only queries SiYuan SQL and does not create, update, or delete notes.",
+    query: {
+      terms,
+      limit,
+      matchedCards: rankedCards.length,
+    },
+    relatedCards: groupCardsByType(rankedCards),
+    evidence,
+  };
+}
+
 async function main() {
   const command = process.argv[2];
   if (!command || command === "-h" || command === "--help") {
     usage();
     return;
+  }
+
+  if (command === "preflight") {
+    return print(await preflight());
   }
 
   const box = command === "tables" ? "" : sqlString(getBox());
@@ -291,6 +605,12 @@ WHERE box = '${box}'
   AND type = 'd'
 ORDER BY updated DESC
 LIMIT ${limit}`));
+  }
+
+  if (command === "topic-summary") {
+    const topic = process.argv[3] || "";
+    const limit = Math.max(1, Math.min(parseInt(argValue("--limit", "12"), 10) || 12, 50));
+    return print(await topicSummary(box, topic, limit));
   }
 
   throw new Error(`Unknown command: ${command}`);

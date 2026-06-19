@@ -13,6 +13,22 @@ WHERE a.box = 'BOX_ID'
 ORDER BY a.value, b.hpath;
 ```
 
+## Preflight
+
+Use `preflight` before live read or write workflows when the local SiYuan environment may be stale or unknown.
+
+```bash
+node skills/siyuan-llm-wiki-manager/scripts/siyuan-query.js preflight
+```
+
+The command is read-only. It checks:
+
+- SiYuan API connectivity and version.
+- SQL read access.
+- Target notebook availability.
+- Standard folder presence.
+- Core card attribute counts for `custom-type`, `custom-status`, and `custom-keywords`.
+
 ## Cards by Type
 
 ```sql
@@ -139,3 +155,17 @@ WHERE t.box = 'BOX_ID'
   AND r.id IS NULL
 ORDER BY t.value, b.hpath;
 ```
+
+## Topic Summary Input
+
+Use `topic-summary` as a read-only retrieval preset, not as a persisted card type. It gathers typed cards and matching evidence snippets for a runtime summary.
+
+```bash
+node skills/siyuan-llm-wiki-manager/scripts/siyuan-query.js topic-summary "AI Coding / Agent 工作方式"
+```
+
+The command returns structured JSON:
+
+- `relatedCards`: matched `map`, `concept`, `project`, `question`, and `source` cards grouped by `custom-type`.
+- `evidence`: up to five matching snippets per card.
+- `mode`: always `read-only`; the command does not create, update, or delete SiYuan notes.

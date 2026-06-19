@@ -82,9 +82,15 @@ node skills/siyuan-llm-wiki-manager/scripts/siyuan-query.js orphan-cards
 node skills/siyuan-llm-wiki-manager/scripts/siyuan-query.js cards-by-status --status stale
 node skills/siyuan-llm-wiki-manager/scripts/siyuan-query.js cards-by-keyword --keyword llm-wiki
 node skills/siyuan-llm-wiki-manager/scripts/siyuan-query.js old-active-cards --days 30
+node skills/siyuan-llm-wiki-manager/scripts/siyuan-query.js preflight
+node skills/siyuan-llm-wiki-manager/scripts/siyuan-query.js topic-summary "AI Coding / Agent 工作方式"
 ```
 
 The script is read-only and only calls `/api/query/sql`.
+
+Use `preflight` before live read or write workflows when environment state is uncertain. It checks SiYuan connectivity, SQL read access, target notebook availability, standard folder presence, and core card attributes without writing any data.
+
+Treat `topic-summary` as a runtime retrieval view: it returns related typed cards plus evidence snippets for the requested topic, but it must not be treated as a new persisted card type or written back to SiYuan by default.
 
 ## Milestone Guidance
 
